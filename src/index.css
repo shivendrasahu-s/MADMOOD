@@ -1,0 +1,378 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Clean Premium Palette */
+  --bg-white: #ffffff;
+  --bg-gray-light: #f8f9fa;
+  --bg-gray-medium: #f1f3f5;
+  --color-black: #000000;
+  --color-gray-dark: #121212;
+  --color-gray-text: #495057;
+  --color-gray-border: #dee2e6;
+  --color-primary: #0a1d37; /* Premium Navy Blue Accent */
+  --color-primary-dim: #050e1b;
+  --color-success: #2b8a3e;
+  --color-gold: #c5a880; /* Elegant Luxury Gold */
+  --color-gold-hover: #b3966e;
+  
+  /* Fonts */
+  --font-heading: 'Montserrat', sans-serif;
+  --font-body: 'Poppins', sans-serif;
+  --font-alt: 'Inter', sans-serif;
+  
+  /* Shadows */
+  --shadow-subtle: 0 2px 10px rgba(0, 0, 0, 0.03);
+  --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.12);
+  
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+}
+
+/* Reset Cursors to Normal Windows default */
+body {
+  background-color: var(--bg-white);
+  color: var(--color-black);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  cursor: default !important;
+}
+
+a, button, select, input, textarea, [role="button"] {
+  cursor: pointer !important;
+}
+
+input[type="text"], input[type="email"], input[type="password"], textarea {
+  cursor: text !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-gray-light);
+}
+::-webkit-scrollbar-thumb {
+  background: #ced4da;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #adb5bd;
+}
+
+/* Base Styles */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--color-black);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Custom UI Utility classes */
+.container {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 0 1rem;
+  }
+}
+
+.premium-card {
+  background: var(--bg-white);
+  border: 1px solid var(--color-gray-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-subtle);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.premium-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Buttons */
+.btn-primary-m {
+  background-color: var(--color-black);
+  color: var(--bg-white);
+  padding: 0.8rem 2.2rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-black);
+  border-radius: 0px; /* Sharp Zara-style edges feel more luxury */
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-primary-m:hover {
+  background-color: var(--color-gold);
+  color: var(--color-black);
+  border-color: var(--color-gold);
+  box-shadow: var(--shadow-medium);
+}
+
+.btn-accent-m {
+  background-color: var(--color-gold);
+  color: var(--color-black);
+  padding: 0.8rem 2.2rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-gold);
+  border-radius: 0px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-accent-m:hover {
+  background-color: var(--color-black);
+  color: var(--bg-white);
+  border-color: var(--color-black);
+  box-shadow: var(--shadow-hover);
+}
+
+.btn-outline-m {
+  background-color: transparent;
+  color: var(--bg-white);
+  padding: 0.8rem 2.2rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid var(--bg-white);
+  border-radius: 0px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-outline-m:hover {
+  background-color: var(--bg-white);
+  color: var(--color-black);
+}
+
+/* Form inputs styling */
+.form-input-m {
+  width: 100%;
+  border: 1px solid var(--color-gray-border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1.1rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--color-black);
+  background-color: var(--bg-white);
+  transition: border-color 0.2s ease;
+  outline: none;
+}
+
+.form-input-m:focus {
+  border-color: var(--color-primary);
+}
+
+/* Star rating reviews styling */
+.star-rating {
+  display: inline-flex;
+  color: #ffc107; /* Gold */
+}
+
+/* Mega Menu Styles */
+.nav-mega-menu-trigger {
+  position: relative;
+}
+
+.nav-mega-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  width: 960px;
+  background-color: #ffffff;
+  border: 1px solid var(--color-gray-border);
+  box-shadow: var(--shadow-hover);
+  border-radius: var(--radius-md);
+  padding: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 240px;
+  gap: 2rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1000;
+}
+
+.nav-mega-menu-trigger:hover .nav-mega-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Instagram Scrolling Gallery */
+.instagram-scroller {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 1rem 0;
+}
+
+.instagram-scroller::-webkit-scrollbar {
+  height: 4px;
+}
+
+.instagram-scroller::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.instagram-card {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gray-border);
+}
+
+.instagram-card img {
+  width: 100%;
+  height: 350px;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.instagram-card:hover img {
+  transform: scale(1.08);
+}
+
+/* Invoice print overrides */
+@media print {
+  body * {
+    visibility: hidden;
+    background: white !important;
+    color: black !important;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Luxury loading overlay styling */
+.luxury-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+}
+
+.loader-logo {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  color: #000000;
+  margin-bottom: 1.5rem;
+}
+
+.loader-bar {
+  width: 200px;
+  height: 2px;
+  background-color: var(--color-gray-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.loader-progress {
+  width: 0;
+  height: 100%;
+  background-color: var(--color-primary);
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: loaderProgress 2.5s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes loaderProgress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+/* Instagram reels aspect ratio & card */
+.instagram-reels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+}
+
+.reel-card {
+  position: relative;
+  overflow: hidden;
+  padding-top: 177.77%; /* 9:16 aspect ratio */
+  background-color: #000;
+}
+
+.reel-card img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reel-card:hover img {
+  transform: scale(1.06);
+}
+
+.reel-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1.5rem;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  z-index: 2;
+  color: #ffffff;
+}
+
+.reel-card:hover .reel-overlay {
+  opacity: 1;
+}

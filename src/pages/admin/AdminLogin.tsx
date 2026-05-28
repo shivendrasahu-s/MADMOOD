@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { isFirebaseEnabled, auth } from '../../services/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { sendEmail } from '../../services/db';
-import { ShieldCheck, Mail, Lock, ArrowRight, AlertTriangle, KeyRound, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, ArrowRight, KeyRound, RefreshCw } from 'lucide-react';
 
 export const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,11 +13,21 @@ export const AdminLogin: React.FC = () => {
   // OTP Verification states
   const [otpInput, setOtpInput] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [timer, setTimer] = useState(0);
   
   // Feedback states
   const [statusMsg, setStatusMsg] = useState({ success: true, text: '' });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (timer > 0) {
+      const interval = setInterval(() => {
+        setTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [timer]);
 
   useEffect(() => {
     // If already logged in, redirect to dashboard
@@ -64,8 +74,9 @@ export const AdminLogin: React.FC = () => {
         }
 
         setGeneratedOtp(newOtp);
+        setTimer(60);
         
-        // Dispatch OTP via the simulated mail service
+        // Dispatch OTP via the mail service
         await sendEmail(
           normalizedEmail,
           'MADMOOD SECURITY // ADMIN PANEL 2FA OTP',
@@ -81,7 +92,7 @@ export const AdminLogin: React.FC = () => {
         );
 
         setStep('otp');
-        setStatusMsg({ success: true, text: 'OTP sent to shivendrasahu003@gmail.com. Check developer mail inbox.' });
+        setStatusMsg({ success: true, text: 'OTP sent to shivendrasahu003@gmail.com.' });
       } catch (error: any) {
         console.error('Firebase Admin Authentication error:', error);
         setStatusMsg({ 
@@ -96,6 +107,7 @@ export const AdminLogin: React.FC = () => {
       setTimeout(async () => {
         if (normalizedEmail === 'shivendrasahu003@gmail.com' && password === 'admin123') {
           setGeneratedOtp(newOtp);
+          setTimer(60);
           
           await sendEmail(
             normalizedEmail,
@@ -112,7 +124,7 @@ export const AdminLogin: React.FC = () => {
           );
 
           setStep('otp');
-          setStatusMsg({ success: true, text: 'MOCK VERIFICATION SUCCESS: OTP dispatched to Mail Simulator.' });
+          setStatusMsg({ success: true, text: 'Simulated OTP sent to shivendrasahu003@gmail.com.' });
         } else {
           setStatusMsg({ 
             success: false, 
@@ -121,6 +133,36 @@ export const AdminLogin: React.FC = () => {
         }
         setLoading(false);
       }, 800);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    setStatusMsg({ success: true, text: '' });
+    const normalizedEmail = email.trim().toLowerCase();
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(newOtp);
+    setTimer(60);
+
+    try {
+      await sendEmail(
+        normalizedEmail,
+        'MADMOOD SECURITY // ADMIN PANEL 2FA OTP',
+        `<div style="font-family: sans-serif; padding: 2rem; border: 1px solid #eee; max-width: 600px;">
+          <h2 style="color: #000; letter-spacing: 0.1em; border-bottom: 2px solid #000; padding-bottom: 0.5rem;">MAD MOOD SECURITY GATEWAY</h2>
+          <p>A sign-in request was initiated for the Admin Dashboard at ${new Date().toLocaleString()}.</p>
+          <p style="font-size: 1.1rem; color: #555;">Use the following 6-digit verification code to complete sign-in:</p>
+          <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 1.5rem; text-align: center; font-size: 2.25rem; font-weight: 800; letter-spacing: 0.25em; color: #000; margin: 1.5rem 0;">
+            ${newOtp}
+          </div>
+          <p style="font-size: 0.8rem; color: #999;">If you did not initiate this request, please change your credentials immediately.</p>
+        </div>`
+      );
+      setStatusMsg({ success: true, text: 'A new security token has been dispatched.' });
+    } catch (error: any) {
+      setStatusMsg({ success: false, text: 'Failed to resend OTP. Please try again.' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -176,7 +218,7 @@ export const AdminLogin: React.FC = () => {
            <p>This is a simulated password reset link for local development:</p>
            <a href="#reset" style="padding: 10px 20px; background: #000; color: #fff; text-decoration: none; display: inline-block;">RESET ADMIN PASSWORD</a>`
         );
-        setStatusMsg({ success: true, text: 'MOCK SUCCESS: Password reset link dispatched to Mail Simulator.' });
+        setStatusMsg({ success: true, text: 'MOCK SUCCESS: Password reset link dispatched to your email.' });
         setTimeout(() => setStep('login'), 3000);
         setLoading(false);
       }, 1000);
@@ -197,27 +239,28 @@ export const AdminLogin: React.FC = () => {
         
         {/* Environment status banner */}
         <div style={{
-          background: isFirebaseEnabled ? 'rgba(43, 138, 62, 0.08)' : 'rgba(255, 169, 0, 0.08)',
-          border: `1.5px solid ${isFirebaseEnabled ? 'var(--color-success)' : '#ffa900'}`,
-          color: isFirebaseEnabled ? 'var(--color-success)' : '#c28500',
-          padding: '0.85rem 1rem',
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          borderRadius: '4px',
+          background: '#000000',
+          border: '1px solid #111111',
+          color: '#a3a3a3',
+          padding: '0.85rem 1.25rem',
+          fontSize: '0.7rem',
+          fontWeight: 500,
+          borderRadius: '0px',
           marginBottom: '1.5rem',
           display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px',
-          lineHeight: '1.4'
+          alignItems: 'center',
+          gap: '10px',
+          lineHeight: '1.4',
+          letterSpacing: '0.02em'
         }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
-          <div>
+          <ShieldCheck size={14} color="var(--color-gold)" style={{ flexShrink: 0 }} />
+          <span>
             {isFirebaseEnabled ? (
-              <span><strong>Firebase Mode Active:</strong> Directing queries through live authentication database.</span>
+              <strong>MADMOOD SECURE CORE: Firebase Authentication gateway active.</strong>
             ) : (
-              <span><strong>Simulation Mode Active:</strong> Log in with email <span style={{ color: '#000', fontWeight: 'bold' }}>shivendrasahu003@gmail.com</span> and password <span style={{ color: '#000', fontWeight: 'bold' }}>admin123</span>. OTP appears in Mail Simulator.</span>
+              <strong>MADMOOD SECURE CORE: Simulation Mode Active (email: shivendrasahu003@gmail.com / pwd: admin123).</strong>
             )}
-          </div>
+          </span>
         </div>
 
         <div style={{
@@ -359,7 +402,7 @@ export const AdminLogin: React.FC = () => {
                   {loading ? 'CONFIRMING...' : 'AUTHORIZE SESSION'} <ShieldCheck size={14} />
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', alignItems: 'center' }}>
                   <button 
                     type="button" 
                     onClick={() => {
@@ -369,6 +412,24 @@ export const AdminLogin: React.FC = () => {
                     style={{ background: 'none', border: 'none', color: 'var(--color-gray-text)', fontSize: '0.7rem', textDecoration: 'underline', padding: 0, cursor: 'pointer' }}
                   >
                     Back to Login
+                  </button>
+
+                  <button 
+                    type="button" 
+                    disabled={timer > 0 || loading}
+                    onClick={handleResendOtp}
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      color: timer > 0 ? 'var(--color-gray-text)' : 'var(--color-black)', 
+                      fontSize: '0.7rem', 
+                      fontWeight: 600,
+                      textDecoration: timer > 0 ? 'none' : 'underline', 
+                      padding: 0, 
+                      cursor: timer > 0 ? 'default' : 'pointer' 
+                    }}
+                  >
+                    {timer > 0 ? `Resend OTP in ${timer}s` : 'Resend OTP Code'}
                   </button>
                 </div>
               </form>

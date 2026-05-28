@@ -26,7 +26,12 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   GoogleAuthProvider,
-  onAuthStateChanged
+  onAuthStateChanged,
+  RecaptchaVerifier,
+  PhoneAuthProvider,
+  linkWithCredential,
+  signInWithPhoneNumber,
+  linkWithPhoneNumber
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -52,8 +57,8 @@ interface AppContextType {
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   sendEmailOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   verifyEmailOTP: (email: string, code: string) => Promise<{ success: boolean; message: string }>;
-  sendPhoneOTP: (phone: string) => Promise<{ success: boolean; message: string }>;
-  verifyPhoneOTP: (phone: string, code: string) => Promise<{ success: boolean; message: string }>;
+  sendPhoneOTP: (phone: string, recaptchaVerifierId?: string) => Promise<{ success: boolean; message: string; verificationId?: string }>;
+  verifyPhoneOTP: (phone: string, code: string, verificationId?: string) => Promise<{ success: boolean; message: string }>;
   updateUserProfile: (fields: Partial<User>) => Promise<{ success: boolean; message: string }>;
 }
 
@@ -82,8 +87,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const userDocSnap = await getDoc(userDocRef);
             
             let userData: User;
+            const isAdmin = email === 'shivendrasahu003@gmail.com';
             if (userDocSnap.exists()) {
               userData = userDocSnap.data() as User;
+              if (isAdmin && (userData.role !== 'admin' || !userData.isAdmin)) {
+                userData.role = 'admin';
+                userData.isAdmin = true;
+                await setDoc(userDocRef, userData, { merge: true });
+              }
             } else {
               const nameParts = firebaseUser.displayName ? firebaseUser.displayName.split(' ') : ['MAD', 'Customer'];
               userData = {
@@ -91,7 +102,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 firstName: nameParts[0] || 'MAD',
                 lastName: nameParts.slice(1).join(' ') || 'Customer',
                 addresses: [],
-                wishlist: []
+                wishlist: [],
+                isAdmin,
+                role: isAdmin ? 'admin' : 'user'
               };
               await setDoc(userDocRef, userData);
             }
@@ -180,12 +193,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const pswd = password || 'dummy_password_123';
         await createUserWithEmailAndPassword(auth, cleanEmail, pswd);
         
+        const isAdmin = cleanEmail === 'shivendrasahu003@gmail.com';
         const newUser: User = {
           email: cleanEmail,
           firstName: first,
           lastName: last,
           addresses: [],
-          wishlist: []
+          wishlist: [],
+          isAdmin,
+          role: isAdmin ? 'admin' : 'user'
         };
         await setDoc(doc(db, 'users', cleanEmail), newUser);
         
@@ -222,15 +238,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const userDocSnap = await getDoc(userDocRef);
           
           let userData: User;
+          const isAdmin = email === 'shivendrasahu003@gmail.com';
           if (userDocSnap.exists()) {
             userData = userDocSnap.data() as User;
+            if (isAdmin && (userData.role !== 'admin' || !userData.isAdmin)) {
+              userData.role = 'admin';
+              userData.isAdmin = true;
+              await setDoc(userDocRef, userData, { merge: true });
+            }
           } else {
             userData = {
               email,
               firstName: first,
               lastName: last,
               addresses: [],
-              wishlist: []
+              wishlist: [],
+              isAdmin,
+              role: isAdmin ? 'admin' : 'user'
             };
             await setDoc(userDocRef, userData);
           }
@@ -322,27 +346,104 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: false, message: 'Invalid or expired OTP code.' };
   };
 
-  const sendPhoneOTP = async (phone: string) => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    await saveOTP(phone, code);
-    sendSMS(phone, `[MAD MOOD] Your phone verification security code is: ${code}. Valid for 5 minutes.`);
-    return { success: true, message: 'OTP sent to your phone number.' };
+  const sendPhoneOTP = async (phone: string, recaptchaVerifierId?: string) => {
+    if (isFirebaseEnabled && auth) {
+      try {
+        const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+        const verifierId = recaptchaVerifierId || 'phone-recaptcha-container';
+        
+        console.log(`[Firebase Phone Auth] Initializing RecaptchaVerifier on container ID: ${verifierId}`);
+
+        if ((window as any).recaptchaVerifier) {
+          try {
+            (window as any).recaptchaVerifier.clear();
+          } catch (_) {}
+        }
+
+        const recaptchaVerifier = new RecaptchaVerifier(auth, verifierId, {
+          size: 'invisible',
+          callback: () => {
+            console.log('[Firebase Phone Auth] reCAPTCHA challenge verified.');
+          },
+          'expired-callback': () => {
+            console.warn('[Firebase Phone Auth] reCAPTCHA challenge expired.');
+          }
+        });
+        (window as any).recaptchaVerifier = recaptchaVerifier;
+
+        let confirmationResult;
+        if (auth.currentUser) {
+          console.log('[Firebase Phone Auth] Existing user authenticated. Linking phone number...');
+          confirmationResult = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier);
+        } else {
+          console.log('[Firebase Phone Auth] No session found. Signing in with phone number...');
+          confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier);
+        }
+
+        (window as any).confirmationResult = confirmationResult;
+        console.log('[Firebase Phone Auth] OTP sent. Verification ID:', confirmationResult.verificationId);
+
+        return { success: true, message: 'OTP sent to your phone number.', verificationId: confirmationResult.verificationId };
+      } catch (error: any) {
+        console.error('Firebase Phone Auth OTP Send Error:', error);
+        return { success: false, message: error.message || 'Failed to dispatch phone verification OTP.' };
+      }
+    } else {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await saveOTP(phone, code);
+      await sendSMS(phone, `[MAD MOOD] Your phone verification security code is: ${code}. Valid for 5 minutes.`);
+      return { success: true, message: 'OTP sent to your phone number.' };
+    }
   };
 
-  const verifyPhoneOTP = async (phone: string, code: string) => {
-    const isValid = await verifyOTP(phone, code);
-    if (isValid) {
-      if (!currentUser) return { success: false, message: 'Authentication required.' };
-      
-      const updatedUser = await updateUserProfileFields(currentUser.email, { isPhoneVerified: true, phone });
-      const users = getStoredData<Record<string, User>>('mmi_users', {});
-      users[currentUser.email] = updatedUser;
-      setStoredData('mmi_users', users);
-      
-      refreshUser();
-      return { success: true, message: 'Phone number verified successfully.' };
+  const verifyPhoneOTP = async (phone: string, code: string, verificationId?: string) => {
+    if (isFirebaseEnabled && auth) {
+      try {
+        const confirmationResult = (window as any).confirmationResult;
+        let userCredential;
+
+        if (confirmationResult) {
+          console.log('[Firebase Phone Auth] Confirming OTP using confirmationResult...');
+          userCredential = await confirmationResult.confirm(code);
+        } else if (verificationId && auth.currentUser) {
+          console.log('[Firebase Phone Auth] Fallback: Linking with PhoneAuthProvider credential...');
+          const credential = PhoneAuthProvider.credential(verificationId, code);
+          userCredential = await linkWithCredential(auth.currentUser, credential);
+        } else {
+          throw new Error('Verification session not found. Please request a new OTP code.');
+        }
+
+        console.log('[Firebase Phone Auth] Verification complete:', userCredential);
+
+        const userEmail = auth.currentUser?.email || currentUser?.email || '';
+        if (userEmail) {
+          const updatedUser = await updateUserProfileFields(userEmail, { isPhoneVerified: true, phone });
+          const users = getStoredData<Record<string, User>>('mmi_users', {});
+          users[userEmail.toLowerCase().trim()] = updatedUser;
+          setStoredData('mmi_users', users);
+        }
+        
+        refreshUser();
+        return { success: true, message: 'Phone number verified successfully.' };
+      } catch (error: any) {
+        console.error('Firebase Phone Auth Verification Error:', error);
+        return { success: false, message: error.message || 'Invalid or expired OTP code.' };
+      }
+    } else {
+      const isValid = await verifyOTP(phone, code);
+      if (isValid) {
+        if (!currentUser) return { success: false, message: 'Authentication required.' };
+        
+        const updatedUser = await updateUserProfileFields(currentUser.email, { isPhoneVerified: true, phone });
+        const users = getStoredData<Record<string, User>>('mmi_users', {});
+        users[currentUser.email] = updatedUser;
+        setStoredData('mmi_users', users);
+        
+        refreshUser();
+        return { success: true, message: 'Phone number verified successfully.' };
+      }
+      return { success: false, message: 'Invalid or expired OTP code.' };
     }
-    return { success: false, message: 'Invalid or expired OTP code.' };
   };
 
   const updateUserProfile = async (fields: Partial<User>) => {

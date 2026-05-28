@@ -108,7 +108,7 @@ export const Policies: React.FC = () => {
     },
     {
       q: 'HOW TO CONTACT CUSTOMER SUPPORT CHANNELS?',
-      a: 'You can reach us directly via email at shivendrasahu002@gmail.com, call our customer support helpline at +91 6386376901, or submit a support ticket via this portal.'
+      a: 'You can reach us directly via email at shivendrasahu003@gmail.com, call our customer support helpline at +91 6386376901, or submit a support ticket via this portal.'
     }
   ];
 
@@ -644,7 +644,7 @@ export const Policies: React.FC = () => {
                         <Mail size={18} color="var(--color-gold)" style={{ marginBottom: '0.75rem' }} />
                         <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'var(--color-black)', fontFamily: 'var(--font-heading)' }}>OFFICIAL EMAIL</h4>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gray-text)', lineHeight: '1.4' }}>
-                          <a href="mailto:shivendrasahu002@gmail.com" style={{ color: 'var(--color-black)', textDecoration: 'underline' }}>shivendrasahu002@gmail.com</a>
+                          <a href="mailto:shivendrasahu003@gmail.com" style={{ color: 'var(--color-black)', textDecoration: 'underline' }}>shivendrasahu003@gmail.com</a>
                         </p>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useApp } from '../../context/AppContext';
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -19,12 +20,14 @@ import {
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useApp();
   
   // Theme state
   const [isDark, setIsDark] = useState(() => localStorage.getItem('mmi_admin_dark') === 'true');
   
   // Responsive sidebar toggles
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   
   // Notifications state
   const [showNotifications, setShowNotifications] = useState(false);
@@ -39,10 +42,23 @@ export const AdminLayout: React.FC = () => {
     const adminSession = sessionStorage.getItem('mmi_admin_authenticated');
     const adminEmail = sessionStorage.getItem('mmi_admin_email');
     
-    if (adminSession !== 'true' || adminEmail !== 'shivendrasahu003@gmail.com') {
-      navigate('/admin/login');
+    const isSessionAdmin = adminSession === 'true' && adminEmail === 'shivendrasahu003@gmail.com';
+    const isContextAdmin = currentUser?.email === 'shivendrasahu003@gmail.com' || currentUser?.role === 'admin';
+
+    if (!isSessionAdmin && !isContextAdmin) {
+      if (currentUser) {
+        setAccessDenied(true);
+        const timer = setTimeout(() => {
+          navigate('/');
+        }, 3000);
+        return () => clearTimeout(timer);
+      } else {
+        navigate('/admin/login');
+      }
+    } else {
+      setAccessDenied(false);
     }
-  }, [navigate]);
+  }, [navigate, currentUser]);
 
   useEffect(() => {
     localStorage.setItem('mmi_admin_dark', isDark ? 'true' : 'false');
@@ -97,6 +113,40 @@ export const AdminLayout: React.FC = () => {
     { path: '/admin/customers', label: 'Customers', icon: Users },
     { path: '/admin/settings', label: 'Settings', icon: SlidersHorizontal }
   ];
+
+  if (accessDenied) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#000000',
+        color: '#ffffff',
+        fontFamily: "'Outfit', Arial, sans-serif",
+        textAlign: 'center',
+        padding: '2rem'
+      }}>
+        <div style={{
+          border: '1px solid #ff0d2b',
+          padding: '3rem',
+          maxWidth: '450px',
+          backgroundColor: '#050505',
+          boxShadow: '0 10px 40px rgba(255, 13, 43, 0.1)',
+          borderRadius: '0px'
+        }}>
+          <h1 style={{ letterSpacing: '0.2em', color: '#ff0d2b', fontSize: '24px', fontWeight: 900, marginBottom: '1.5rem' }}>ACCESS DENIED</h1>
+          <p style={{ fontSize: '14px', color: '#a3a3a3', lineHeight: '1.6', marginBottom: '2rem' }}>
+            This account does not have administration permissions. Unauthorized routing attempts are securely logged.
+          </p>
+          <div style={{ fontSize: '11px', color: '#555555', borderTop: '1px solid #111', paddingTop: '1.5rem' }}>
+            Redirecting to MADMOOD Home in a moment...
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...adminTheme, backgroundColor: 'var(--admin-bg)', color: 'var(--admin-text)', minHeight: '100vh', display: 'flex', flexDirection: 'column', transition: 'background-color 0.3s ease, color 0.3s ease' }}>

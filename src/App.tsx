@@ -25,7 +25,6 @@ import { AdminProducts } from './pages/admin/AdminProducts';
 import { AdminOrders } from './pages/admin/AdminOrders';
 import { AdminCustomers } from './pages/admin/AdminCustomers';
 import { AdminSettings } from './pages/admin/AdminSettings';
-import { MailSimulator } from './components/MailSimulator';
 import { Star, X, ShoppingCart } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -80,6 +79,7 @@ export const App: React.FC = () => {
 
       {/* MAIN VIEWPORT LAYOUT */}
       <div className="main-viewport-layout" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <div id="phone-recaptcha-container" style={{ width: 0, height: 0, overflow: 'hidden', position: 'absolute' }}></div>
         
         {/* Top announcement bar and Sticky Header Navbar */}
         <TopHeader />
@@ -433,8 +433,6 @@ export const App: React.FC = () => {
         }
       `}</style>
 
-      {/* Global simulated notification inbox for developers */}
-      <MailSimulator />
     </>
   );
 };

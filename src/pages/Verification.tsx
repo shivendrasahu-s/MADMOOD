@@ -30,6 +30,7 @@ export const Verification: React.FC = () => {
   const [phoneStatus, setPhoneStatus] = useState<{ success?: boolean; msg: string } | null>(null);
   const [phoneSending, setPhoneSending] = useState(false);
   const [phoneVerifying, setPhoneVerifying] = useState(false);
+  const [phoneVerificationId, setPhoneVerificationId] = useState('');
 
   // Profile completion fields
   const [firstName, setFirstName] = useState('');
@@ -110,7 +111,7 @@ export const Verification: React.FC = () => {
       if (res.success) {
         setEmailOtpSent(true);
         setEmailTimer(300); // 5 minutes
-        setEmailStatus({ success: true, msg: 'Security code successfully dispatched. Check the Mail Simulator or logs.' });
+        setEmailStatus({ success: true, msg: 'Security code successfully dispatched. Please check your email inbox.' });
       } else {
         setEmailStatus({ success: false, msg: res.message });
       }
@@ -156,11 +157,14 @@ export const Verification: React.FC = () => {
     setPhoneSending(true);
     setPhoneStatus(null);
     try {
-      const res = await sendPhoneOTP(cleanPhone);
+      const res = await sendPhoneOTP(cleanPhone, 'phone-recaptcha-container');
       if (res.success) {
+        if (res.verificationId) {
+          setPhoneVerificationId(res.verificationId);
+        }
         setPhoneOtpSent(true);
         setPhoneTimer(300); // 5 minutes
-        setPhoneStatus({ success: true, msg: 'OTP sent successfully. Check your browser developer console or simulator.' });
+        setPhoneStatus({ success: true, msg: 'OTP sent successfully. Please check your mobile phone.' });
       } else {
         setPhoneStatus({ success: false, msg: res.message });
       }
@@ -180,7 +184,7 @@ export const Verification: React.FC = () => {
     setPhoneVerifying(true);
     setPhoneStatus(null);
     try {
-      const res = await verifyPhoneOTP(phoneInput.trim(), phoneCode.trim());
+      const res = await verifyPhoneOTP(phoneInput.trim(), phoneCode.trim(), phoneVerificationId);
       if (res.success) {
         setPhoneStatus({ success: true, msg: 'Phone number verified successfully!' });
         // Automatically switch to profile step

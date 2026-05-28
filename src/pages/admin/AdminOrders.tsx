@@ -253,7 +253,7 @@ export const AdminOrders: React.FC = () => {
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#666', lineHeight: '1.4' }}>
                   Unnao, Uttar Pradesh, India - 209801
                   <br />
-                  Email: shivendrasahu002@gmail.com
+                  Email: shivendrasahu003@gmail.com
                   <br />
                   Ph: +91 6386376901
                 </p>

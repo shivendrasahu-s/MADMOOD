@@ -53,6 +53,7 @@ export interface User {
   isEmailVerified?: boolean;
   isPhoneVerified?: boolean;
   isAdmin?: boolean;
+  role?: 'admin' | 'user';
 }
 
 export interface Address {
@@ -792,7 +793,18 @@ export const initDB = () => {
     setStoredData('mmi_products', INITIAL_PRODUCTS);
   }
   if (!localStorage.getItem('mmi_users')) {
-    setStoredData('mmi_users', {});
+    const adminUser: User = {
+      email: 'shivendrasahu003@gmail.com',
+      firstName: 'MADMOOD',
+      lastName: 'Admin',
+      addresses: [],
+      wishlist: [],
+      isAdmin: true,
+      role: 'admin',
+      isEmailVerified: true,
+      isPhoneVerified: true
+    };
+    setStoredData('mmi_users', { 'shivendrasahu003@gmail.com': adminUser });
   }
   if (!localStorage.getItem('mmi_orders')) {
     setStoredData('mmi_orders', []);
@@ -841,7 +853,7 @@ export const registerUser = (email: string, firstName: string, lastName: string)
   if (users[cleanEmail]) {
     return { success: false, message: 'An account with this email already exists.' };
   }
-  const isAdmin = cleanEmail === 'shivendrasahu002@gmail.com' || cleanEmail === 'admin@madmood.in';
+  const isAdmin = cleanEmail === 'shivendrasahu003@gmail.com';
   const newUser: User = {
     email: cleanEmail,
     firstName,
@@ -850,7 +862,8 @@ export const registerUser = (email: string, firstName: string, lastName: string)
     isPhoneVerified: false,
     addresses: [],
     wishlist: [],
-    isAdmin
+    isAdmin,
+    role: isAdmin ? 'admin' : 'user'
   };
   users[cleanEmail] = newUser;
   setStoredData('mmi_users', users);
@@ -960,8 +973,33 @@ export interface SentEmail {
   timestamp: string;
 }
 
+const getApiUrl = (path: string): string => {
+  const baseUrl = import.meta.env.VITE_BACKEND_URL || '';
+  return `${baseUrl}${path}`;
+};
+
 export const sendEmail = async (to: string, subject: string, html: string): Promise<void> => {
-  if (isFirebaseEnabled && db) {
+  let apiSuccess = false;
+  try {
+    const response = await fetch(getApiUrl('/api/send-email'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to, subject, html }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        apiSuccess = true;
+        console.log(`📧 [MAD MOOD EMAIL SYSTEM] Email sent via API:`, data);
+      }
+    }
+  } catch (error) {
+    console.warn('API send-email endpoint call failed, falling back to database/local simulator:', error);
+  }
+
+  if (!apiSuccess && isFirebaseEnabled && db) {
     try {
       const emailId = 'email_' + Math.random().toString(36).substring(2, 9);
       await setDoc(doc(db, 'emails', emailId), {
@@ -988,13 +1026,43 @@ export const sendEmail = async (to: string, subject: string, html: string): Prom
   sentEmails.unshift(newEmail);
   setStoredData('mmi_sent_emails', sentEmails.slice(0, 50));
   
-  console.log(`📧 [MAD MOOD EMAIL SYSTEM] SENT TO: ${to}\nSUBJECT: ${subject}\nHTML: RENDERED IN VISUAL SIMULATOR DRAWER.`);
   window.dispatchEvent(new Event('mmi_email_dispatched'));
 };
 
-export const sendSMS = (phone: string, message: string): void => {
-  console.log(`📱 [MAD MOOD SMS SYSTEM] TO: ${phone}\nMESSAGE: ${message}`);
-  
+export const sendSMS = async (phone: string, message: string): Promise<void> => {
+  let apiSuccess = false;
+  try {
+    const response = await fetch(getApiUrl('/api/send-sms'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to: phone, body: message }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        apiSuccess = true;
+        console.log(`📱 [MAD MOOD SMS SYSTEM] SMS sent via API:`, data);
+      }
+    }
+  } catch (error) {
+    console.warn('API send-sms endpoint call failed, falling back to database/local simulator:', error);
+  }
+
+  if (!apiSuccess && isFirebaseEnabled && db) {
+    try {
+      const smsId = 'sms_' + Math.random().toString(36).substring(2, 9);
+      await setDoc(doc(db, 'sms', smsId), {
+        to: phone,
+        body: message,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('Error logging SMS trigger to Firestore:', e);
+    }
+  }
+
   const sentSms = getStoredData<{ phone: string; message: string; timestamp: string }[]>('mmi_sent_sms', []);
   sentSms.unshift({ phone, message, timestamp: new Date().toISOString() });
   setStoredData('mmi_sent_sms', sentSms.slice(0, 50));
@@ -1414,7 +1482,7 @@ export const createOrder = (
 
   // Admin Notification Email
   const adminHtml = getAdminOrderEmailHtml(newOrder, customerName, customerEmail);
-  sendEmail('shivendrasahu002@gmail.com', `MAD MOOD ADMIN: NEW ORDER - ${newOrder.id}`, adminHtml);
+  sendEmail('shivendrasahu003@gmail.com', `MAD MOOD ADMIN: NEW ORDER - ${newOrder.id}`, adminHtml);
 
   // SMS dispatch to customer
   sendSMS(shippingAddress.phone, `MAD MOOD: Your order ${newOrder.id} of INR ${total.toLocaleString('en-IN')} has been confirmed! Track here: http://localhost:5173/order-tracking/${newOrder.id}`);

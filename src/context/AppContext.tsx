@@ -10,7 +10,12 @@ import {
   updateUserWishlist,
   clearCart,
   getStoredData,
-  setStoredData
+  setStoredData,
+  updateUserProfileFields,
+  saveOTP,
+  verifyOTP,
+  sendEmail,
+  sendSMS
 } from '../services/db';
 import type { CartItem, User } from '../services/db';
 import { auth, db, isFirebaseEnabled } from '../services/firebase';
@@ -45,6 +50,11 @@ interface AppContextType {
   clearAllCart: () => void;
   googleLogin: () => Promise<{ success: boolean; message: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
+  sendEmailOTP: (email: string) => Promise<{ success: boolean; message: string }>;
+  verifyEmailOTP: (email: string, code: string) => Promise<{ success: boolean; message: string }>;
+  sendPhoneOTP: (phone: string) => Promise<{ success: boolean; message: string }>;
+  verifyPhoneOTP: (phone: string, code: string) => Promise<{ success: boolean; message: string }>;
+  updateUserProfile: (fields: Partial<User>) => Promise<{ success: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -273,6 +283,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const sendEmailOTP = async (email: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    await saveOTP(email, code);
+    
+    const emailHtml = `
+      <div style="background-color: #000000; color: #ffffff; font-family: 'Outfit', Arial, sans-serif; padding: 40px; max-width: 500px; margin: 0 auto; border: 1px solid #111; text-align: center;">
+        <h1 style="letter-spacing: 0.25em; font-weight: 900; margin: 0; color: #ffffff; font-size: 24px;">MAD <span style="color: #ff0d2b;">MOOD</span></h1>
+        <p style="font-size: 8px; color: #a3a3a3; letter-spacing: 0.15em; margin: 5px 0 30px 0; text-transform: uppercase;">Identity Verification System</p>
+        
+        <h2 style="font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: 10px; text-transform: uppercase;">Verify Your Email Address</h2>
+        <p style="color: #a3a3a3; font-size: 13px; line-height: 1.6; margin-bottom: 30px;">Use the security code below to complete your email verification. This code is active for 5 minutes.</p>
+        
+        <div style="background-color: #050505; border: 1px solid #ff0d2b; padding: 15px 30px; font-size: 24px; font-weight: bold; letter-spacing: 0.2em; color: #ff0d2b; display: inline-block; margin-bottom: 30px;">
+          ${code}
+        </div>
+        
+        <p style="font-size: 11px; color: #555555; line-height: 1.5; border-top: 1px solid #111; padding-top: 20px;">
+          If you did not initiate this request, please contact our direct security support immediately at +91 6386376901.
+        </p>
+      </div>
+    `;
+    await sendEmail(email, 'MAD MOOD: EMAIL VERIFICATION SECURITY CODE', emailHtml);
+    return { success: true, message: 'OTP sent to your email.' };
+  };
+
+  const verifyEmailOTP = async (email: string, code: string) => {
+    const isValid = await verifyOTP(email, code);
+    if (isValid) {
+      const updatedUser = await updateUserProfileFields(email, { isEmailVerified: true });
+      const users = getStoredData<Record<string, User>>('mmi_users', {});
+      users[email] = updatedUser;
+      setStoredData('mmi_users', users);
+      
+      refreshUser();
+      return { success: true, message: 'Email verified successfully.' };
+    }
+    return { success: false, message: 'Invalid or expired OTP code.' };
+  };
+
+  const sendPhoneOTP = async (phone: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    await saveOTP(phone, code);
+    sendSMS(phone, `[MAD MOOD] Your phone verification security code is: ${code}. Valid for 5 minutes.`);
+    return { success: true, message: 'OTP sent to your phone number.' };
+  };
+
+  const verifyPhoneOTP = async (phone: string, code: string) => {
+    const isValid = await verifyOTP(phone, code);
+    if (isValid) {
+      if (!currentUser) return { success: false, message: 'Authentication required.' };
+      
+      const updatedUser = await updateUserProfileFields(currentUser.email, { isPhoneVerified: true, phone });
+      const users = getStoredData<Record<string, User>>('mmi_users', {});
+      users[currentUser.email] = updatedUser;
+      setStoredData('mmi_users', users);
+      
+      refreshUser();
+      return { success: true, message: 'Phone number verified successfully.' };
+    }
+    return { success: false, message: 'Invalid or expired OTP code.' };
+  };
+
+  const updateUserProfile = async (fields: Partial<User>) => {
+    if (!currentUser) return { success: false, message: 'Authentication required.' };
+    
+    try {
+      const updatedUser = await updateUserProfileFields(currentUser.email, fields);
+      const users = getStoredData<Record<string, User>>('mmi_users', {});
+      users[currentUser.email] = updatedUser;
+      setStoredData('mmi_users', users);
+      
+      refreshUser();
+      return { success: true, message: 'Profile completed successfully.' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Failed to update profile.' };
+    }
+  };
+
   const toggleWishlist = (id: string): boolean => {
     if (!currentUser) {
       return false; // must be logged in
@@ -321,7 +409,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshUser,
         clearAllCart,
         googleLogin,
-        forgotPassword
+        forgotPassword,
+        sendEmailOTP,
+        verifyEmailOTP,
+        sendPhoneOTP,
+        verifyPhoneOTP,
+        updateUserProfile
       }}
     >
       {children}

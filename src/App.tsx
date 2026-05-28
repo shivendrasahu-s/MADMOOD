@@ -13,10 +13,14 @@ import { Contact } from './pages/Contact';
 import { Auth } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { Checkout } from './pages/Checkout';
+import { Verification } from './pages/Verification';
+import { SearchPage } from './pages/SearchPage';
 import { OrderTracking } from './pages/OrderTracking';
+import { Policies } from './pages/Policies';
 import { type Product, initDB, syncFromFirebase } from './services/db';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { MailSimulator } from './components/MailSimulator';
 import { Star, X, ShoppingCart } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -88,8 +92,11 @@ export const App: React.FC = () => {
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/verify" element={<Verification />} />
+            <Route path="/search" element={<SearchPage onQuickView={openQuickView} />} />
             <Route path="/order-tracking" element={<OrderTracking />} />
             <Route path="/order-tracking/:id" element={<OrderTracking />} />
+            <Route path="/policies" element={<Policies />} />
             <Route path="/admin" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Routes>
@@ -154,13 +161,17 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Support directory */}
+              {/* Help & Legal Services directory */}
               <div>
-                <h4 style={{ fontSize: '0.85rem', marginBottom: '1.25rem', letterSpacing: '0.1em' }}>OPERATOR SERVICES</h4>
+                <h4 style={{ fontSize: '0.85rem', marginBottom: '1.25rem', letterSpacing: '0.1em', color: 'var(--color-white)' }}>HELP & LEGAL SERVICES</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
-                  <Link to="/about" className="hover-trigger footer-link">Brand Story Matrix</Link>
-                  <Link to="/contact" className="hover-trigger footer-link">Direct Support Gateway</Link>
+                  <Link to="/policies?tab=returns" className="hover-trigger footer-link">Returns & Refunds</Link>
+                  <Link to="/policies?tab=shipping" className="hover-trigger footer-link">Shipping Policy</Link>
+                  <Link to="/policies?tab=privacy" className="hover-trigger footer-link">Privacy Policy</Link>
+                  <Link to="/policies?tab=terms" className="hover-trigger footer-link">Terms & Conditions</Link>
+                  <Link to="/policies?tab=contact" className="hover-trigger footer-link">Contact Us</Link>
                   <Link to="/order-tracking" className="hover-trigger footer-link">Track Active Shipment</Link>
+                  <Link to="/policies?tab=faqs" className="hover-trigger footer-link">FAQs</Link>
                 </div>
               </div>
 
@@ -409,6 +420,9 @@ export const App: React.FC = () => {
           to { transform: scale(1); opacity: 1; }
         }
       `}</style>
+
+      {/* Global simulated notification inbox for developers */}
+      <MailSimulator />
     </>
   );
 };

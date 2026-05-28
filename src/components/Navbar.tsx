@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { ShoppingBag, User, Heart, Search, Menu, X, LogOut, ArrowRight } from 'lucide-react';
+import { ShoppingBag, User, Heart, Search, Menu, X, LogOut, ArrowRight, Clock, TrendingUp, ArrowUpRight, Grid } from 'lucide-react';
+import { getSearchSuggestions, addRecentSearch, type SearchSuggestions } from '../services/searchService';
+import { getStoredData, setStoredData } from '../services/db';
 
 export const Navbar: React.FC = () => {
   const { cartCount, wishlist, currentUser, setCartOpen, userLogout } = useApp();
@@ -11,6 +13,18 @@ export const Navbar: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<SearchSuggestions>({
+    recent: [],
+    trending: [],
+    suggestedCategories: [],
+    predictedKeywords: [],
+    matchedProducts: []
+  });
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const flatItems: { label: string; type: 'category' | 'keyword' | 'product' | 'recent' | 'trending'; value: string; url: string; data?: any }[] = [];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,13 +38,57 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Sync suggestions
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const res = getSearchSuggestions(searchVal);
+      setSuggestions(res);
+      setHighlightIndex(-1);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [searchVal, searchFocused, mobileSearchOpen]);
+
+  // Click outside to close desktop search suggestion dropdown
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchVal.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchVal.trim())}`);
+      addRecentSearch(searchVal.trim());
+      navigate(`/search?q=${encodeURIComponent(searchVal.trim())}`);
       setSearchVal('');
       setSearchFocused(false);
+      setMobileSearchOpen(false);
     }
+  };
+
+  const handleSelectSuggestion = (value: string, url: string, type: string) => {
+    if (type !== 'product') {
+      addRecentSearch(value);
+    }
+    navigate(url);
+    setSearchFocused(false);
+    setMobileSearchOpen(false);
+    setSearchVal('');
+  };
+
+  const handleDeleteRecent = (e: React.MouseEvent, term: string) => {
+    e.stopPropagation();
+    const recent = getStoredData<string[]>('mmi_recent_searches', []);
+    const updated = recent.filter(r => r.toLowerCase() !== term.toLowerCase());
+    setStoredData('mmi_recent_searches', updated);
+    setSuggestions(prev => ({
+      ...prev,
+      recent: updated
+    }));
   };
 
   const isActive = (path: string) => {
@@ -331,40 +389,312 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Search bar slots */}
-        <form onSubmit={handleSearchSubmit} className="search-form-m" style={{
+        {/* Keyboard navigation list compiler */}
+        {(() => {
+          flatItems.length = 0; // Clear array
+          if (searchFocused) {
+            if (!searchVal.trim()) {
+              suggestions.recent.forEach(r => flatItems.push({ label: r, type: 'recent', value: r, url: `/search?q=${encodeURIComponent(r)}` }));
+              suggestions.trending.forEach(t => flatItems.push({ label: t, type: 'trending', value: t, url: `/search?q=${encodeURIComponent(t)}` }));
+            } else {
+              suggestions.suggestedCategories.forEach(c => flatItems.push({ label: c, type: 'category', value: c, url: `/search?q=${encodeURIComponent(c)}` }));
+              suggestions.predictedKeywords.forEach(k => flatItems.push({ label: k, type: 'keyword', value: k, url: `/search?q=${encodeURIComponent(k)}` }));
+              suggestions.matchedProducts.forEach(p => flatItems.push({ label: p.name, type: 'product', value: p.name, url: `/product/${p.id}`, data: p }));
+            }
+          }
+          return null;
+        })()}
+
+        <div ref={searchContainerRef} className="search-form-container-m" style={{
           position: 'relative',
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
           flexGrow: searchFocused ? 0.35 : 0.15,
           maxWidth: '320px',
           transition: 'flex-grow 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
-          <input
-            type="text"
-            placeholder="Search premium collections..."
-            value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-            style={{
-              background: scrolled ? 'rgba(255, 255, 255, 0.08)' : 'var(--bg-gray-light)',
-              border: scrolled ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--color-gray-border)',
-              padding: '0.55rem 1rem 0.55rem 2.2rem',
-              color: scrolled ? '#ffffff' : 'var(--color-black)',
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.8rem',
-              width: '100%',
-              outline: 'none',
-              borderRadius: '0px', // Sharp premium corners
-              transition: 'all 0.2s ease'
-            }}
-          />
-          <Search size={14} style={{
-            position: 'absolute',
-            left: '12px',
-            color: scrolled ? 'rgba(255, 255, 255, 0.6)' : 'var(--color-gray-text)'
-          }} />
-        </form>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search premium collections..."
+              value={searchVal}
+              onChange={(e) => setSearchVal(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setHighlightIndex(prev => (prev < flatItems.length - 1 ? prev + 1 : prev));
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setHighlightIndex(prev => (prev > -1 ? prev - 1 : -1));
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (highlightIndex >= 0 && highlightIndex < flatItems.length) {
+                    const item = flatItems[highlightIndex];
+                    handleSelectSuggestion(item.value, item.url, item.type);
+                  } else if (searchVal.trim()) {
+                    handleSearchSubmit(e);
+                  }
+                } else if (e.key === 'Escape') {
+                  setSearchFocused(false);
+                  setHighlightIndex(-1);
+                }
+              }}
+              style={{
+                background: scrolled ? 'rgba(255, 255, 255, 0.08)' : 'var(--bg-gray-light)',
+                border: scrolled ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--color-gray-border)',
+                padding: '0.55rem 1rem 0.55rem 2.2rem',
+                color: scrolled ? '#ffffff' : 'var(--color-black)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.8rem',
+                width: '100%',
+                outline: 'none',
+                borderRadius: '0px',
+                transition: 'all 0.2s ease'
+              }}
+            />
+            <Search size={14} style={{
+              position: 'absolute',
+              left: '12px',
+              color: scrolled ? 'rgba(255, 255, 255, 0.6)' : 'var(--color-gray-text)'
+            }} />
+          </form>
+
+          {/* DESKTOP SEARCH SUGGESTIONS PANEL */}
+          {searchFocused && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              width: '520px',
+              background: scrolled ? '#111111' : '#ffffff',
+              border: scrolled ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid #111111',
+              boxShadow: '0 15px 35px rgba(0,0,0,0.25)',
+              zIndex: 9999,
+              marginTop: '5px',
+              color: scrolled ? '#ffffff' : '#111111',
+              display: 'grid',
+              gridTemplateColumns: (!searchVal.trim() && suggestions.recent.length === 0) ? '1fr' : '1.2fr 1.8fr',
+              gap: '0px',
+              fontFamily: "'Inter', sans-serif"
+            }}>
+              
+              {/* Left Side: Keywords/Categories */}
+              <div style={{
+                padding: '1.25rem',
+                borderRight: (!searchVal.trim() && suggestions.recent.length === 0) ? 'none' : (scrolled ? '1px solid rgba(255,255,255,0.08)' : '1px solid #eee'),
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.25rem'
+              }}>
+                {!searchVal.trim() ? (
+                  <>
+                    {suggestions.recent.length > 0 && (
+                      <div>
+                        <h4 style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                          RECENT SEARCHES
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {suggestions.recent.map((term, index) => {
+                            const isHighlighted = flatItems.indexOf(flatItems.find(f => f.type === 'recent' && f.value === term)!) === highlightIndex;
+                            return (
+                              <div
+                                key={index}
+                                onClick={() => handleSelectSuggestion(term, `/search?q=${encodeURIComponent(term)}`, 'recent')}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '0.75rem',
+                                  color: scrolled ? '#ccc' : '#444',
+                                  cursor: 'pointer',
+                                  padding: '4px 6px',
+                                  backgroundColor: isHighlighted ? (scrolled ? 'rgba(255,255,255,0.08)' : '#f5f5f5') : 'transparent'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Clock size={12} color="#888" />
+                                  <span>{term}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteRecent(e, term)}
+                                  style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '2px' }}
+                                  title="Remove"
+                                >
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <h4 style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                        TRENDING SEARCHES
+                      </h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {suggestions.trending.map((term, index) => {
+                          const isHighlighted = flatItems.indexOf(flatItems.find(f => f.type === 'trending' && f.value === term)!) === highlightIndex;
+                          return (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={() => handleSelectSuggestion(term, `/search?q=${encodeURIComponent(term)}`, 'trending')}
+                              style={{
+                                backgroundColor: isHighlighted ? 'var(--color-gold)' : (scrolled ? 'rgba(255,255,255,0.08)' : '#f5f5f5'),
+                                color: isHighlighted ? '#111' : (scrolled ? '#fff' : '#111'),
+                                border: 'none',
+                                padding: '4px 10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <TrendingUp size={10} color={isHighlighted ? '#111' : '#D4AF37'} />
+                              {term}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Matched Categories */}
+                    {suggestions.suggestedCategories.length > 0 && (
+                      <div>
+                        <h4 style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                          CATEGORIES
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {suggestions.suggestedCategories.map((cat, index) => {
+                            const isHighlighted = flatItems.indexOf(flatItems.find(f => f.type === 'category' && f.value === cat)!) === highlightIndex;
+                            return (
+                              <div
+                                key={index}
+                                onClick={() => handleSelectSuggestion(cat, `/search?q=${encodeURIComponent(cat)}`, 'category')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  color: scrolled ? '#fff' : '#111',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  backgroundColor: isHighlighted ? (scrolled ? 'rgba(255,255,255,0.08)' : '#f5f5f5') : 'transparent'
+                                }}
+                              >
+                                <Grid size={12} color="#D4AF37" />
+                                {cat}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Predicted Keywords */}
+                    {suggestions.predictedKeywords.length > 0 && (
+                      <div>
+                        <h4 style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                          SUGGESTED KEYWORDS
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {suggestions.predictedKeywords.map((kw, index) => {
+                            const isHighlighted = flatItems.indexOf(flatItems.find(f => f.type === 'keyword' && f.value === kw)!) === highlightIndex;
+                            return (
+                              <div
+                                key={index}
+                                onClick={() => handleSelectSuggestion(kw, `/search?q=${encodeURIComponent(kw)}`, 'keyword')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '0.75rem',
+                                  color: scrolled ? '#ccc' : '#444',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  backgroundColor: isHighlighted ? (scrolled ? 'rgba(255,255,255,0.08)' : '#f5f5f5') : 'transparent'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Search size={10} color="#888" />
+                                  <span>{kw}</span>
+                                </div>
+                                <ArrowUpRight size={12} color="#bbb" />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right Side: Matching Products */}
+              {searchVal.trim() && (
+                <div style={{ padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                    MATCHING PRODUCTS
+                  </h4>
+
+                  {suggestions.matchedProducts.length === 0 ? (
+                    <div style={{ fontSize: '0.75rem', color: '#888', padding: '1rem 0' }}>
+                      No matching products found.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {suggestions.matchedProducts.map((p) => {
+                        const isHighlighted = flatItems.indexOf(flatItems.find(f => f.type === 'product' && f.value === p.name)!) === highlightIndex;
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => {
+                              navigate(`/product/${p.id}`);
+                              setSearchFocused(false);
+                              setSearchVal('');
+                            }}
+                            style={{
+                              display: 'flex',
+                              gap: '8px',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              backgroundColor: isHighlighted ? (scrolled ? 'rgba(255,255,255,0.08)' : '#f5f5f5') : 'transparent',
+                              transition: 'background 0.2s ease'
+                            }}
+                          >
+                            <img
+                              src={p.images[0]}
+                              alt={p.name}
+                              style={{ width: '36px', height: '45px', objectFit: 'cover', border: '1px solid rgba(0,0,0,0.05)' }}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, flexGrow: 1 }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
+                                {p.name}
+                              </span>
+                              <span style={{ fontSize: '0.65rem', color: '#888' }}>
+                                {p.category} • ₹{p.price}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+          )}
+        </div>
 
         {/* Utilities: Wishlist, Cart, Profile */}
         <div style={{
@@ -372,6 +702,22 @@ export const Navbar: React.FC = () => {
           gap: '1.25rem',
           alignItems: 'center'
         }}>
+          {/* Mobile Search Button Trigger */}
+          <button
+            onClick={() => setMobileSearchOpen(true)}
+            className="mobile-search-trigger-btn"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: scrolled ? '#ffffff' : 'var(--color-black)',
+              padding: '4px',
+              cursor: 'pointer'
+            }}
+            title="Search"
+          >
+            <Search size={20} />
+          </button>
+
           {/* Wishlist */}
           <Link to="/dashboard?tab=wishlist" style={{
             color: scrolled ? '#ffffff' : 'var(--color-black)',
@@ -529,6 +875,9 @@ export const Navbar: React.FC = () => {
           color: var(--color-gold) !important;
         }
 
+        .mobile-search-trigger-btn {
+          display: none !important;
+        }
         @media (max-width: 990px) {
           .desktop-links {
             display: none !important;
@@ -536,8 +885,11 @@ export const Navbar: React.FC = () => {
           .mobile-hamburger-btn {
             display: block !important;
           }
-          .search-form-m {
+          .search-form-container-m {
             display: none !important;
+          }
+          .mobile-search-trigger-btn {
+            display: flex !important;
           }
         }
       `}</style>
@@ -590,6 +942,203 @@ export const Navbar: React.FC = () => {
               DISCONNECT <LogOut size={16} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* FULLSCREEN MOBILE SEARCH OVERLAY */}
+      {mobileSearchOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: '#ffffff',
+          zIndex: 10000,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '1.5rem',
+          fontFamily: "'Inter', sans-serif"
+        }}>
+          {/* Mobile Search Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <form onSubmit={handleSearchSubmit} style={{ flexGrow: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search streetwear, polo shirts, sizes..."
+                value={searchVal}
+                onChange={(e) => setSearchVal(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.8rem 1rem 0.8rem 2.5rem',
+                  border: '1px solid #111111',
+                  borderRadius: '0px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  color: '#111'
+                }}
+              />
+              <Search size={16} style={{ position: 'absolute', left: '12px', color: '#666' }} />
+            </form>
+            <button
+              type="button"
+              onClick={() => { setMobileSearchOpen(false); setSearchVal(''); }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#111111',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                padding: '0.55rem 0'
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          {/* Suggestions Content for Mobile */}
+          <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+            {!searchVal.trim() ? (
+              <div>
+                {suggestions.recent.length > 0 && (
+                  <div style={{ marginBottom: '2rem' }}>
+                    <h4 style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '1rem' }}>
+                      RECENT SEARCHES
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {suggestions.recent.map((term, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleSelectSuggestion(term, `/search?q=${encodeURIComponent(term)}`, 'recent')}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem', color: '#333', cursor: 'pointer' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Clock size={14} color="#888" />
+                            <span>{term}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteRecent(e, term)}
+                            style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', padding: '4px' }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '1rem' }}>
+                    TRENDING SEARCHES
+                  </h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {suggestions.trending.map((term, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleSelectSuggestion(term, `/search?q=${encodeURIComponent(term)}`, 'trending')}
+                        style={{
+                          backgroundColor: '#f5f5f5',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.8rem',
+                          color: '#111',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        <TrendingUp size={12} color="#D4AF37" />
+                        {term}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {suggestions.suggestedCategories.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                      CATEGORIES
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {suggestions.suggestedCategories.map((cat, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleSelectSuggestion(cat, `/search?q=${encodeURIComponent(cat)}`, 'category')}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#111', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          <Grid size={14} color="#D4AF37" />
+                          {cat}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {suggestions.predictedKeywords.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                      SUGGESTIONS
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {suggestions.predictedKeywords.map((kw, index) => (
+                        <div
+                          key={index}
+                          onClick={() => handleSelectSuggestion(kw, `/search?q=${encodeURIComponent(kw)}`, 'keyword')}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem', color: '#333', cursor: 'pointer', paddingBottom: '0.5rem', borderBottom: '1px solid #f5f5f5' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Search size={12} color="#888" />
+                            <span>{kw}</span>
+                          </div>
+                          <ArrowUpRight size={14} color="#bbb" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {suggestions.matchedProducts.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+                      PRODUCTS
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {suggestions.matchedProducts.map((product) => (
+                        <div
+                          key={product.id}
+                          onClick={() => {
+                            navigate(`/product/${product.id}`);
+                            setMobileSearchOpen(false);
+                            setSearchVal('');
+                          }}
+                          style={{ display: 'flex', gap: '0.75rem', cursor: 'pointer' }}
+                        >
+                          <img
+                            src={product.images[0]}
+                            alt={product.name}
+                            style={{ width: '40px', height: '50px', objectFit: 'cover', border: '1px solid #eee' }}
+                          />
+                          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#111' }}>{product.name}</span>
+                            <span style={{ fontSize: '0.65rem', color: '#666' }}>₹{product.price}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
       <style>{`

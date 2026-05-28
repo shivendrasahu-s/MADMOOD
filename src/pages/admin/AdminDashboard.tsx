@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useApp } from '../../context/AppContext';
 import { 
   getProducts, 
   getAllOrdersAdmin, 
@@ -43,6 +44,7 @@ import {
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const [activeModule, setActiveModule] = useState<'overview' | 'products' | 'orders' | 'customers' | 'homepage' | 'popup' | 'inventory'>('overview');
 
   // Database States
@@ -77,12 +79,18 @@ export const AdminDashboard: React.FC = () => {
   // Security check on mount
   useEffect(() => {
     const adminSession = sessionStorage.getItem('mmi_admin_authenticated');
-    if (adminSession !== 'true') {
+    const isUserAdmin = currentUser && (
+      currentUser.isAdmin === true || 
+      currentUser.email === 'shivendrasahu002@gmail.com' || 
+      currentUser.email === 'admin@madmood.in'
+    );
+
+    if (adminSession !== 'true' && !isUserAdmin) {
       navigate('/admin');
       return;
     }
     loadData();
-  }, [navigate]);
+  }, [currentUser, navigate]);
 
   const loadData = () => {
     setProducts(getProducts());

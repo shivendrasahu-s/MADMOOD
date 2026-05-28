@@ -56,6 +56,17 @@ export const Checkout: React.FC = () => {
       return;
     }
 
+    if (!currentUser) {
+      navigate('/auth?redirect=checkout');
+      return;
+    }
+
+    const isProfileComplete = currentUser.phone && currentUser.city && currentUser.state && currentUser.pincode;
+    if (!currentUser.isEmailVerified || !currentUser.isPhoneVerified || !isProfileComplete) {
+      navigate('/verify?redirect=checkout');
+      return;
+    }
+
     // Load discount cache
     const promo = localStorage.getItem('mmi_applied_promo');
     if (promo) {
@@ -63,7 +74,7 @@ export const Checkout: React.FC = () => {
     }
 
     // Auto-fill first address if logged in
-    if (currentUser && currentUser.addresses && currentUser.addresses.length > 0) {
+    if (currentUser.addresses && currentUser.addresses.length > 0) {
       const firstAddr = currentUser.addresses[0];
       setSelectedAddressId(firstAddr.id);
       applySavedAddress(firstAddr);

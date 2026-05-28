@@ -1,5 +1,5 @@
 import { isFirebaseEnabled, db } from './firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 
 export interface Product {
   id: string;
@@ -46,6 +46,13 @@ export interface User {
   lastName: string;
   addresses: Address[];
   wishlist: string[]; // product IDs
+  phone?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  isEmailVerified?: boolean;
+  isPhoneVerified?: boolean;
+  isAdmin?: boolean;
 }
 
 export interface Address {
@@ -834,12 +841,16 @@ export const registerUser = (email: string, firstName: string, lastName: string)
   if (users[cleanEmail]) {
     return { success: false, message: 'An account with this email already exists.' };
   }
+  const isAdmin = cleanEmail === 'shivendrasahu002@gmail.com' || cleanEmail === 'admin@madmood.in';
   const newUser: User = {
     email: cleanEmail,
     firstName,
     lastName,
+    isEmailVerified: false,
+    isPhoneVerified: false,
     addresses: [],
-    wishlist: []
+    wishlist: [],
+    isAdmin
   };
   users[cleanEmail] = newUser;
   setStoredData('mmi_users', users);
@@ -861,6 +872,136 @@ export const logoutUser = (): void => {
   localStorage.removeItem('mmi_session_user');
 };
 
+export const updateUserProfileFields = async (email: string, fields: Partial<User>): Promise<User> => {
+  const users = getStoredData<Record<string, User>>('mmi_users', {});
+  const cleanEmail = email.toLowerCase().trim();
+  if (users[cleanEmail]) {
+    users[cleanEmail] = {
+      ...users[cleanEmail],
+      ...fields
+    };
+    setStoredData('mmi_users', users);
+    
+    if (isFirebaseEnabled && db) {
+      try {
+        await setDoc(doc(db, 'users', cleanEmail), users[cleanEmail]);
+      } catch (e) {
+        console.error('Error syncing user profile edit to Firestore:', e);
+      }
+    }
+    return users[cleanEmail];
+  }
+  throw new Error('User profile not found.');
+};
+
+export const saveOTP = async (target: string, code: string): Promise<void> => {
+  const expiry = Date.now() + 5 * 60 * 1000; // 5 mins
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, 'otps', target), { code, expiresAt: expiry });
+    } catch (e) {
+      console.error('Error saving OTP to Firestore:', e);
+    }
+  }
+  // Store locally for simulation/fallback
+  const otps = getStoredData<Record<string, { code: string; expiresAt: number }>>('mmi_otps', {});
+  otps[target] = { code, expiresAt: expiry };
+  setStoredData('mmi_otps', otps);
+};
+
+export const verifyOTP = async (target: string, code: string): Promise<boolean> => {
+  let matchedCode = '';
+  let expiresAt = 0;
+  
+  if (isFirebaseEnabled && db) {
+    try {
+      const snap = await getDoc(doc(db, 'otps', target));
+      if (snap.exists()) {
+        const data = snap.data();
+        matchedCode = data.code;
+        expiresAt = data.expiresAt;
+      }
+    } catch (e) {
+      console.error('Error reading OTP from Firestore:', e);
+    }
+  }
+  
+  if (!matchedCode) {
+    const otps = getStoredData<Record<string, { code: string; expiresAt: number }>>('mmi_otps', {});
+    const entry = otps[target];
+    if (entry) {
+      matchedCode = entry.code;
+      expiresAt = entry.expiresAt;
+    }
+  }
+  
+  if (matchedCode === code && Date.now() < expiresAt) {
+    // Delete OTP after successful verification
+    const otps = getStoredData<Record<string, any>>('mmi_otps', {});
+    delete otps[target];
+    setStoredData('mmi_otps', otps);
+    if (isFirebaseEnabled && db) {
+      try {
+        await deleteDoc(doc(db, 'otps', target));
+      } catch (e) {
+        console.error('Error deleting OTP from Firestore:', e);
+      }
+    }
+    return true;
+  }
+  return false;
+};
+
+export interface SentEmail {
+  id: string;
+  to: string;
+  subject: string;
+  html: string;
+  timestamp: string;
+}
+
+export const sendEmail = async (to: string, subject: string, html: string): Promise<void> => {
+  if (isFirebaseEnabled && db) {
+    try {
+      const emailId = 'email_' + Math.random().toString(36).substring(2, 9);
+      await setDoc(doc(db, 'emails', emailId), {
+        to: [to],
+        message: {
+          subject,
+          html,
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('Error logging email trigger to Firestore:', e);
+    }
+  }
+  
+  const sentEmails = getStoredData<SentEmail[]>('mmi_sent_emails', []);
+  const newEmail: SentEmail = {
+    id: 'eml_' + Math.random().toString(36).substring(2, 9),
+    to,
+    subject,
+    html,
+    timestamp: new Date().toISOString()
+  };
+  sentEmails.unshift(newEmail);
+  setStoredData('mmi_sent_emails', sentEmails.slice(0, 50));
+  
+  console.log(`📧 [MAD MOOD EMAIL SYSTEM] SENT TO: ${to}\nSUBJECT: ${subject}\nHTML: RENDERED IN VISUAL SIMULATOR DRAWER.`);
+  window.dispatchEvent(new Event('mmi_email_dispatched'));
+};
+
+export const sendSMS = (phone: string, message: string): void => {
+  console.log(`📱 [MAD MOOD SMS SYSTEM] TO: ${phone}\nMESSAGE: ${message}`);
+  
+  const sentSms = getStoredData<{ phone: string; message: string; timestamp: string }[]>('mmi_sent_sms', []);
+  sentSms.unshift({ phone, message, timestamp: new Date().toISOString() });
+  setStoredData('mmi_sent_sms', sentSms.slice(0, 50));
+  
+  window.dispatchEvent(new Event('mmi_sms_dispatched'));
+};
+
 export const updateUserWishlist = (productId: string): { active: boolean } => {
   const user = getCurrentSessionUser();
   if (!user) return { active: false };
@@ -880,6 +1021,10 @@ export const updateUserWishlist = (productId: string): { active: boolean } => {
 
   users[userEmail].wishlist = wishlist;
   setStoredData('mmi_users', users);
+  
+  if (isFirebaseEnabled && db) {
+    setDoc(doc(db, 'users', userEmail), users[userEmail]).catch(err => console.error('Firestore user wishlist sync error:', err));
+  }
   return { active };
 };
 
@@ -906,6 +1051,10 @@ export const updateUserAddress = (address: Omit<Address, 'id'>, id?: string): Ad
 
   users[userEmail].addresses = addresses;
   setStoredData('mmi_users', users);
+
+  if (isFirebaseEnabled && db) {
+    setDoc(doc(db, 'users', userEmail), users[userEmail]).catch(err => console.error('Firestore user address sync error:', err));
+  }
   return addresses;
 };
 
@@ -920,6 +1069,10 @@ export const deleteUserAddress = (id: string): Address[] => {
 
   users[userEmail].addresses = filtered;
   setStoredData('mmi_users', users);
+
+  if (isFirebaseEnabled && db) {
+    setDoc(doc(db, 'users', userEmail), users[userEmail]).catch(err => console.error('Firestore user address deletion sync error:', err));
+  }
   return filtered;
 };
 
@@ -969,6 +1122,221 @@ export const getOrders = (): Order[] => {
 export const getOrderById = (id: string): Order | undefined => {
   const orders = getStoredData<Order[]>('mmi_orders', []);
   return orders.find(o => o.id === id || o.trackingNumber === id);
+};
+
+// --- PREMIUM EMAIL TEMPLATE COMPILERS ---
+
+const getCustomerOrderEmailHtml = (order: Order, customerName: string): string => {
+  const itemsRows = order.items.map(item => `
+    <tr>
+      <td style="padding: 12px 0; border-bottom: 1px solid #1a1a1a; font-weight: 600; color: #ffffff; font-size: 13px;">
+        ${item.product.name} (Size: ${item.size})
+      </td>
+      <td style="padding: 12px 0; border-bottom: 1px solid #1a1a1a; text-align: center; color: #a3a3a3; font-size: 13px;">
+        x${item.quantity}
+      </td>
+      <td style="padding: 12px 0; border-bottom: 1px solid #1a1a1a; text-align: right; font-weight: 700; color: #ffffff; font-size: 13px;">
+        ₹${(item.priceAtPurchase * item.quantity).toLocaleString('en-IN')}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="background-color: #000000; color: #ffffff; font-family: 'Outfit', Arial, sans-serif; padding: 40px 20px; max-width: 600px; margin: 0 auto; border: 1px solid #111;">
+      <div style="text-align: center; border-bottom: 1px solid #111; padding-bottom: 25px; margin-bottom: 30px;">
+        <h1 style="letter-spacing: 0.3em; font-weight: 900; margin: 0; color: #ffffff; font-size: 24px;">MAD <span style="color: #ff0d2b;">MOOD</span></h1>
+        <p style="font-size: 8px; color: #a3a3a3; letter-spacing: 0.2em; margin: 5px 0 0 0; text-transform: uppercase;">Official Confirmation invoice</p>
+      </div>
+      
+      <div style="margin-bottom: 30px;">
+        <h2 style="font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: 0.05em; margin-bottom: 12px; text-transform: uppercase;">Order Confirmed</h2>
+        <p style="color: #a3a3a3; font-size: 13px; line-height: 1.6; margin: 0;">Dear ${customerName},</p>
+        <p style="color: #a3a3a3; font-size: 13px; line-height: 1.6; margin: 8px 0 0 0;">Your purchase request has been verified. We are packaging your configurations for dispatch. Below is your commercial invoice summary.</p>
+      </div>
+
+      <div style="background-color: #050505; border: 1px solid #111; padding: 20px; margin-bottom: 30px;">
+        <h3 style="font-size: 11px; color: #ff0d2b; letter-spacing: 0.1em; margin: 0 0 12px 0; border-bottom: 1px solid #111; padding-bottom: 8px; text-transform: uppercase; font-family: 'Orbitron', sans-serif;">TELEMETRY METADATA</h3>
+        <table style="width: 100%; font-size: 12px; color: #a3a3a3; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 4px 0;"><strong>Order Reference:</strong></td>
+            <td style="padding: 4px 0; text-align: right; color: #ffffff; font-weight: bold;">${order.id}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0;"><strong>Tracking Transit ID:</strong></td>
+            <td style="padding: 4px 0; text-align: right; color: #ffffff;">${order.trackingNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0;"><strong>Settlement Channel:</strong></td>
+            <td style="padding: 4px 0; text-align: right; color: #ffffff; text-transform: uppercase;">${order.paymentMethod}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0;"><strong>Fulfillment ETA:</strong></td>
+            <td style="padding: 4px 0; text-align: right; color: #ffffff;">3-5 Business Days</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 30px;">
+        <h3 style="font-size: 11px; color: #ff0d2b; letter-spacing: 0.1em; margin: 0 0 12px 0; border-bottom: 1px solid #111; padding-bottom: 8px; text-transform: uppercase; font-family: 'Orbitron', sans-serif;">LINE ACQUISITIONS</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #111; text-align: left; color: #a3a3a3;">
+              <th style="padding-bottom: 8px; font-weight: 500;">SPECIFICATION</th>
+              <th style="padding-bottom: 8px; text-align: center; font-weight: 500;">QTY</th>
+              <th style="padding-bottom: 8px; text-align: right; font-weight: 500;">RATE</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="width: 220px; margin-left: auto; margin-bottom: 30px; font-size: 12px; color: #a3a3a3;">
+        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+          <span>Bag Subtotal:</span>
+          <span style="color: #ffffff;">₹${order.subtotal.toLocaleString('en-IN')}</span>
+        </div>
+        ${order.discount > 0 ? `
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; color: #03a685; font-weight: 600;">
+          <span>Promo Code:</span>
+          <span>-₹${order.discount.toLocaleString('en-IN')}</span>
+        </div>
+        ` : ''}
+        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+          <span>CGST (9.0%):</span>
+          <span style="color: #ffffff;">₹${Math.round(order.gstAmount / 2).toLocaleString('en-IN')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+          <span>SGST (9.0%):</span>
+          <span style="color: #ffffff;">₹${Math.round(order.gstAmount / 2).toLocaleString('en-IN')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+          <span>Shipping:</span>
+          <span style="color: #ffffff;">${order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-top: 1px solid #ff0d2b; padding-top: 8px; margin-top: 8px; font-size: 14px; font-weight: 900; color: #ffffff;">
+          <span>Grand Total:</span>
+          <span style="color: #ff0d2b;">₹${order.total.toLocaleString('en-IN')}</span>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid #111; padding-top: 20px; font-size: 12px; color: #a3a3a3; margin-bottom: 25px;">
+        <h4 style="margin: 0 0 6px 0; color: #ffffff; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; font-family: 'Orbitron', sans-serif;">SHIPPING DESTINATION</h4>
+        <p style="margin: 0; line-height: 1.6; color: #ffffff;">
+          ${order.shippingAddress.streetAddress}, ${order.shippingAddress.locality}<br />
+          ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}<br />
+          <span style="color: #a3a3a3;">Contact Phone:</span> ${order.shippingAddress.phone}
+        </p>
+      </div>
+
+      <div style="border-top: 1px solid #111; padding-top: 20px; text-align: center; font-size: 10px; color: #555555; line-height: 1.6; font-family: 'Orbitron', sans-serif;">
+        <p style="margin: 0 0 4px 0; font-weight: 700; color: #a3a3a3; letter-spacing: 0.1em;">MAD MOOD CO.</p>
+        <p style="margin: 0 0 4px 0;">Unnao, Uttar Pradesh, India - 209801 | +91 6386376901</p>
+        <p style="margin: 0;">Powered by: Mr. Pushpendra Sahu, Mr. Shivendra Sahu & Mr. Dipendra Sahu</p>
+      </div>
+    </div>
+  `;
+};
+
+const getAdminOrderEmailHtml = (order: Order, customerName: string, customerEmail: string): string => {
+  const itemsRows = order.items.map(item => `
+    <tr>
+      <td style="padding: 10px; border: 1px solid #ddd; font-size: 13px;">${item.product.name} (ID: ${item.product.id})</td>
+      <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 13px;">${item.size}</td>
+      <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 13px;">${item.quantity}</td>
+      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-size: 13px;">₹${item.priceAtPurchase.toLocaleString('en-IN')}</td>
+      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-size: 13px; font-weight: 700;">₹{(item.priceAtPurchase * item.quantity).toLocaleString('en-IN')}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="font-family: Arial, sans-serif; padding: 30px; border: 1px solid #ccc; color: #333; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+      <h2 style="color: #000; border-bottom: 2px solid #ff0d2b; padding-bottom: 10px; margin-top: 0; font-size: 18px; letter-spacing: 0.02em;">⚠️ NEW ECOMMERCE ORDER RECEIVED</h2>
+      <p style="font-size: 13px; color: #666;">A new purchase transaction was successfully completed on the storefront backend.</p>
+      
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; border: 1px solid #eee;">
+        <tr style="background: #f5f5f5;"><td colspan="2" style="padding: 8px; font-weight: 700; border: 1px solid #eee;">CUSTOMER PROFILE</td></tr>
+        <tr><td style="padding: 8px; width: 150px; font-weight: 700; border: 1px solid #eee;">Name:</td><td style="padding: 8px; border: 1px solid #eee;">${customerName}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Email:</td><td style="padding: 8px; border: 1px solid #eee;">${customerEmail}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Verified Phone:</td><td style="padding: 8px; border: 1px solid #eee;">${order.shippingAddress.phone}</td></tr>
+        
+        <tr style="background: #f5f5f5;"><td colspan="2" style="padding: 8px; font-weight: 700; border: 1px solid #eee;">TRANSACTION RECORD</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Order ID:</td><td style="padding: 8px; font-weight: bold; color: #ff0d2b; border: 1px solid #eee;">${order.id}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Timestamp:</td><td style="padding: 8px; border: 1px solid #eee;">${new Date(order.date).toLocaleString('en-IN')}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Payment Method:</td><td style="padding: 8px; text-transform: uppercase; border: 1px solid #eee;">${order.paymentMethod}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Settlement Status:</td><td style="padding: 8px; font-weight: bold; color: #03a685; border: 1px solid #eee;">${order.status}</td></tr>
+        <tr><td style="padding: 8px; font-weight: 700; border: 1px solid #eee;">Grand Total:</td><td style="padding: 8px; font-weight: bold; font-size: 14px; border: 1px solid #eee;">₹${order.total.toLocaleString('en-IN')}</td></tr>
+      </table>
+
+      <h3 style="font-size: 13px; margin-bottom: 8px; font-weight: 700;">ACQUISITION DETAILS:</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px;">
+        <thead>
+          <tr style="background: #000; color: #fff; text-align: left;">
+            <th style="padding: 8px; border: 1px solid #000;">ITEM DESCRIPTION</th>
+            <th style="padding: 8px; border: 1px solid #000; text-align: center;">SIZE</th>
+            <th style="padding: 8px; border: 1px solid #000; text-align: center;">QTY</th>
+            <th style="padding: 8px; border: 1px solid #000; text-align: right;">RATE</th>
+            <th style="padding: 8px; border: 1px solid #000; text-align: right;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+
+      <h3 style="font-size: 13px; margin-bottom: 8px; font-weight: 700;">SHIPPING ADDRESS DETAILS:</h3>
+      <div style="background-color: #fafafa; padding: 12px; border: 1px solid #eee; font-size: 12px;">
+        <p style="margin: 0; line-height: 1.5;">
+          ${order.shippingAddress.streetAddress}, ${order.shippingAddress.locality}<br />
+          ${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}
+        </p>
+      </div>
+      
+      <p style="font-size: 10px; color: #999; text-align: center; margin-top: 25px; border-top: 1px solid #eee; padding-top: 15px;">
+        MAD MOOD AUTOMATED ADMIN TERMINAL // UNNAO CAMPUS
+      </p>
+    </div>
+  `;
+};
+
+const getOrderStatusEmailHtml = (order: Order, customerName: string): string => {
+  return `
+    <div style="background-color: #000000; color: #ffffff; font-family: 'Outfit', Arial, sans-serif; padding: 40px 20px; max-width: 600px; margin: 0 auto; border: 1px solid #111;">
+      <div style="text-align: center; border-bottom: 1px solid #111; padding-bottom: 25px; margin-bottom: 30px;">
+        <h1 style="letter-spacing: 0.3em; font-weight: 900; margin: 0; color: #ffffff; font-size: 24px;">MAD <span style="color: #ff0d2b;">MOOD</span></h1>
+        <p style="font-size: 8px; color: #a3a3a3; letter-spacing: 0.2em; margin: 5px 0 0 0; text-transform: uppercase;">Order Transit telemetries</p>
+      </div>
+
+      <div style="margin-bottom: 30px; text-align: center;">
+        <h2 style="font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: 0.05em; margin-bottom: 10px; text-transform: uppercase;">Transit Status Update</h2>
+        <p style="color: #a3a3a3; font-size: 13px;">Dear ${customerName},</p>
+        <p style="color: #a3a3a3; font-size: 13px; line-height: 1.5; margin: 10px 0;">
+          Your order <strong>${order.id}</strong> status has been successfully updated:
+        </p>
+        <div style="display: inline-block; background-color: #ff0d2b; color: #ffffff; font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 900; padding: 8px 24px; margin: 15px 0; letter-spacing: 0.1em;">
+          ${order.status.toUpperCase()}
+        </div>
+      </div>
+
+      <div style="background-color: #050505; border: 1px solid #111; padding: 15px; margin-bottom: 30px; font-size: 12px; color: #a3a3a3; line-height: 1.6;">
+        <p style="margin: 0 0 4px 0;"><strong>Tracking Transit ID:</strong> ${order.trackingNumber}</p>
+        <p style="margin: 0 0 4px 0;"><strong>Settlement:</strong> ${order.paymentMethod.toUpperCase()}</p>
+        <p style="margin: 0;"><strong>Fulfillment Partner:</strong> MAD EXPRESS COURIER</p>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 30px;">
+        <a href="http://localhost:5173/order-tracking/${order.id}" style="display: inline-block; background-color: #ffffff; color: #000000; padding: 10px 24px; text-decoration: none; font-weight: 700; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">
+          Track Live Dispatch
+        </a>
+      </div>
+
+      <div style="border-top: 1px solid #111; padding-top: 20px; text-align: center; font-size: 10px; color: #555555; line-height: 1.6; font-family: 'Orbitron', sans-serif;">
+        <p style="margin: 0 0 4px 0; font-weight: 700; color: #a3a3a3; letter-spacing: 0.1em;">MAD MOOD CO.</p>
+        <p style="margin: 0;">Unnao, Uttar Pradesh, India - 209801 | +91 6386376901</p>
+      </div>
+    </div>
+  `;
 };
 
 export const createOrder = (
@@ -1035,6 +1403,22 @@ export const createOrder = (
     setDoc(doc(db, 'orders', newOrder.id), newOrder).catch((err: any) => console.error('Firestore order sync error:', err));
   }
 
+  // Trigger Confirmation Notifications
+  const user = getCurrentSessionUser();
+  const customerEmail = user?.email || 'customer@madmood.in';
+  const customerName = user ? `${user.firstName} ${user.lastName}` : shippingAddress.label;
+  
+  // Customer Email invoice
+  const customerHtml = getCustomerOrderEmailHtml(newOrder, customerName);
+  sendEmail(customerEmail, `MAD MOOD: ORDER CONFIRMED - ${newOrder.id}`, customerHtml);
+
+  // Admin Notification Email
+  const adminHtml = getAdminOrderEmailHtml(newOrder, customerName, customerEmail);
+  sendEmail('shivendrasahu002@gmail.com', `MAD MOOD ADMIN: NEW ORDER - ${newOrder.id}`, adminHtml);
+
+  // SMS dispatch to customer
+  sendSMS(shippingAddress.phone, `MAD MOOD: Your order ${newOrder.id} of INR ${total.toLocaleString('en-IN')} has been confirmed! Track here: http://localhost:5173/order-tracking/${newOrder.id}`);
+
   return newOrder;
 };
 
@@ -1043,22 +1427,38 @@ export const updateSimulatedOrderStatus = (): void => {
   const orders = getStoredData<Order[]>('mmi_orders', []);
   let updated = false;
 
-  const orderFlows: Record<Order['status'], Order['status']> = {
+  const orderFlows: Record<string, Order['status']> = {
     'Pending': 'Shipped',
     'Paid': 'Shipped',
     'Failed': 'Failed',
     'Shipped': 'Delivered',
     'Delivered': 'Delivered',
-    'Cancelled': 'Cancelled'
+    'Cancelled': 'Cancelled',
+    'Confirmed': 'Shipped',
+    'Processing': 'Shipped',
+    'Out for Delivery': 'Delivered'
   };
 
   const updatedOrders = orders.map(o => {
-    if (o.status !== 'Delivered' && Math.random() < 0.3) {
+    if (o.status !== 'Delivered' && o.status !== 'Cancelled' && Math.random() < 0.25) {
       updated = true;
-      return {
-        ...o,
-        status: orderFlows[o.status]
-      };
+      const nextStatus = orderFlows[o.status] || o.status;
+      
+      // Dispatch status emails/SMS for simulated updates
+      const user = getStoredData<Record<string, User>>('mmi_users', {})[o.shippingAddress.phone] || getCurrentSessionUser();
+      const customerEmail = user?.email || 'customer@madmood.in';
+      const customerName = user ? `${user.firstName} ${user.lastName}` : o.shippingAddress.label;
+      
+      const newO = { ...o, status: nextStatus };
+      
+      const statusHtml = getOrderStatusEmailHtml(newO, customerName);
+      sendEmail(customerEmail, `MAD MOOD: ORDER STATUS UPDATE - ${o.id}`, statusHtml);
+      sendSMS(o.shippingAddress.phone, `MAD MOOD: Your order ${o.id} status has been updated to: ${nextStatus}. Track: http://localhost:5173/order-tracking/${o.id}`);
+      
+      if (isFirebaseEnabled && db) {
+        setDoc(doc(db, 'orders', o.id), newO).catch(err => console.error('Firestore order update sync error:', err));
+      }
+      return newO;
     }
     return o;
   });
@@ -1077,12 +1477,25 @@ export const updateOrderStatus = (orderId: string, status: Order['status']): voi
   const orders = getAllOrdersAdmin();
   const idx = orders.findIndex(o => o.id === orderId);
   if (idx !== -1) {
+    const oldStatus = orders[idx].status;
     orders[idx].status = status;
     setStoredData('mmi_orders', orders);
     
     // Sync status change to Firebase
     if (isFirebaseEnabled && db) {
       setDoc(doc(db, 'orders', orderId), orders[idx]).catch(err => console.error('Firestore sync error:', err));
+    }
+
+    // Trigger status update notifications if status actually changed
+    if (oldStatus !== status) {
+      const user = getStoredData<Record<string, User>>('mmi_users', {})[orders[idx].shippingAddress.phone] || getCurrentSessionUser();
+      const customerEmail = user?.email || 'customer@madmood.in';
+      const customerName = user ? `${user.firstName} ${user.lastName}` : orders[idx].shippingAddress.label;
+      
+      const statusHtml = getOrderStatusEmailHtml(orders[idx], customerName);
+      sendEmail(customerEmail, `MAD MOOD: ORDER STATUS UPDATE - ${orderId}`, statusHtml);
+      
+      sendSMS(orders[idx].shippingAddress.phone, `MAD MOOD: Your order ${orderId} has been updated to: ${status}. Track: http://localhost:5173/order-tracking/${orderId}`);
     }
   }
 };

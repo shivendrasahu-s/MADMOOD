@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-
-const announcements = [
-  'FREE COURIER SHIPPING ACROSS INDIA FOR ALL ORDERS ABOVE ₹1499',
-  'GET FLAT 15% OFF ON YOUR FIRST ORDER - USE CODE: MOOD15',
-  'NEW SEASON RELEASES: EXPLORE PREMIUM LINEN CAPSULES LIVE'
-];
+import { getAnnouncements } from '../services/db';
 
 export const TopHeader: React.FC = () => {
+  const [announcements, setAnnouncements] = useState<string[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
 
   useEffect(() => {
+    // Fetch dynamic announcements from database
+    const list = getAnnouncements();
+    setAnnouncements(list);
+  }, []);
+
+  useEffect(() => {
+    if (announcements.length === 0) return;
     const timer = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % announcements.length);
     }, 4000);
     return () => clearInterval(timer);
-  }, []);
+  }, [announcements]);
 
   return (
     <div style={{
@@ -34,26 +37,28 @@ export const TopHeader: React.FC = () => {
       zIndex: 1001,
       borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
     }}>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentIdx}
-          initial={{ y: 15, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -15, opacity: 0 }}
-          transition={{ duration: 0.35, ease: 'easeInOut' }}
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            color: 'var(--color-gold)', // Elegant gold text accent
-            textAlign: 'center',
-            padding: '0 1rem'
-          }}
-        >
-          <span style={{ color: '#ffffff', fontSize: '0.6rem' }}>●</span> {announcements[currentIdx]} <span style={{ color: '#ffffff', fontSize: '0.6rem' }}>●</span>
-        </motion.div>
-      </AnimatePresence>
+      {announcements.length > 0 && (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIdx}
+            initial={{ y: 15, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -15, opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeInOut' }}
+            style={{
+              position: 'absolute',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: 'var(--color-gold)', // Elegant gold text accent
+              textAlign: 'center',
+              padding: '0 1rem'
+            }}
+          >
+            <span style={{ color: '#ffffff', fontSize: '0.6rem' }}>●</span> {announcements[currentIdx]} <span style={{ color: '#ffffff', fontSize: '0.6rem' }}>●</span>
+          </motion.div>
+        </AnimatePresence>
+      )}
     </div>
   );
 };

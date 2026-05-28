@@ -1716,9 +1716,81 @@ export const syncFromFirebase = async (): Promise<void> => {
       } else if (doc.id === 'banners') {
         const data = doc.data() as { slides: BannerSlide[] };
         setStoredData('mmi_banners_settings', data.slides);
+      } else if (doc.id === 'coupons') {
+        const data = doc.data() as { list: Coupon[] };
+        setStoredData('mmi_coupons', data.list);
+      } else if (doc.id === 'announcements') {
+        const data = doc.data() as { list: string[] };
+        setStoredData('mmi_announcements', data.list);
       }
     });
   } catch (error) {
     console.error('Error syncing from Firestore:', error);
   }
 };
+
+// --- COUPON & ANNOUNCEMENT MANAGEMENT ---
+
+export interface Coupon {
+  code: string;
+  type: 'fixed' | 'percent';
+  value: number;
+  minPurchase: number;
+  isActive: boolean;
+}
+
+export const getCoupons = (): Coupon[] => {
+  const defaultCoupons: Coupon[] = [
+    { code: 'MADINDIAN', type: 'fixed', value: 200, minPurchase: 999, isActive: true },
+    { code: 'MOOD15', type: 'percent', value: 15, minPurchase: 0, isActive: true }
+  ];
+  return getStoredData<Coupon[]>('mmi_coupons', defaultCoupons);
+};
+
+export const saveCoupons = (coupons: Coupon[]): void => {
+  setStoredData('mmi_coupons', coupons);
+  if (isFirebaseEnabled && db) {
+    setDoc(doc(db, 'settings', 'coupons'), { list: coupons }).catch((err: any) => console.error('Firestore coupons sync error:', err));
+  }
+};
+
+export const addCoupon = (coupon: Coupon): void => {
+  const coupons = getCoupons();
+  if (coupons.some(c => c.code === coupon.code.toUpperCase())) {
+    throw new Error('COUPON ALREADY EXISTS');
+  }
+  coupons.push({ ...coupon, code: coupon.code.toUpperCase() });
+  saveCoupons(coupons);
+};
+
+export const updateCoupon = (coupon: Coupon): void => {
+  const coupons = getCoupons();
+  const idx = coupons.findIndex(c => c.code === coupon.code.toUpperCase());
+  if (idx !== -1) {
+    coupons[idx] = coupon;
+    saveCoupons(coupons);
+  }
+};
+
+export const deleteCoupon = (code: string): void => {
+  const coupons = getCoupons();
+  const updated = coupons.filter(c => c.code !== code.toUpperCase());
+  saveCoupons(updated);
+};
+
+export const getAnnouncements = (): string[] => {
+  const defaultAnnouncements = [
+    'FREE COURIER SHIPPING ACROSS INDIA FOR ALL ORDERS ABOVE ₹1499',
+    'GET FLAT 15% OFF ON YOUR FIRST ORDER - USE CODE: MOOD15',
+    'NEW SEASON RELEASES: EXPLORE PREMIUM LINEN CAPSULES LIVE'
+  ];
+  return getStoredData<string[]>('mmi_announcements', defaultAnnouncements);
+};
+
+export const saveAnnouncements = (announcements: string[]): void => {
+  setStoredData('mmi_announcements', announcements);
+  if (isFirebaseEnabled && db) {
+    setDoc(doc(db, 'settings', 'announcements'), { list: announcements }).catch((err: any) => console.error('Firestore announcements sync error:', err));
+  }
+};
+

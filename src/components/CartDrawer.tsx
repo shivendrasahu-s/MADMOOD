@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { getProductById } from '../services/db';
+import { getProductById, getCoupons } from '../services/db';
 import { X, Trash2, Plus, Minus, ArrowRight, Tag } from 'lucide-react';
 
 export const CartDrawer: React.FC = () => {
@@ -35,24 +35,30 @@ export const CartDrawer: React.FC = () => {
     e.preventDefault();
     setPromoError('');
     const code = couponInput.trim().toUpperCase();
-    if (code === 'MADINDIAN') {
-      if (subtotal < 999) {
-        setPromoError('MINIMUM PURCHASE REQUIRED: Code MADINDIAN requires order value above ₹999.');
+    
+    const activeCoupons = getCoupons();
+    const match = activeCoupons.find(c => c.code === code && c.isActive);
+    
+    if (match) {
+      if (subtotal < match.minPurchase) {
+        setPromoError(`MINIMUM PURCHASE REQUIRED: Code ${match.code} requires order value above ₹${match.minPurchase}.`);
       } else {
-        setAppliedPromo({ code: 'MADINDIAN', discount: 200 });
+        const calculatedDiscount = match.type === 'percent' 
+          ? Math.round(subtotal * (match.value / 100))
+          : match.value;
+        setAppliedPromo({ code: match.code, discount: calculatedDiscount });
         setCouponInput('');
       }
-    } else if (code === 'MOOD15') {
-      setAppliedPromo({ code: 'MOOD15', discount: Math.round(subtotal * 0.15) });
-      setCouponInput('');
     } else {
-      setPromoError('INVALID COUPON: The code entered is invalid.');
+      setPromoError('INVALID COUPON: The code entered is invalid or expired.');
     }
   };
 
-  const discount = appliedPromo 
-    ? (appliedPromo.code === 'MOOD15' ? Math.round(subtotal * 0.15) : appliedPromo.discount) 
-    : 0;
+  const activeCoupons = getCoupons();
+  const appliedCoupon = appliedPromo ? activeCoupons.find(c => c.code === appliedPromo.code) : null;
+  const discount = appliedCoupon
+    ? (appliedCoupon.type === 'percent' ? Math.round(subtotal * (appliedCoupon.value / 100)) : appliedCoupon.value)
+    : (appliedPromo ? appliedPromo.discount : 0);
   const shipping = subtotal >= 999 || subtotal === 0 ? 0 : 99; // Free above ₹999
   const total = subtotal - discount + shipping;
 

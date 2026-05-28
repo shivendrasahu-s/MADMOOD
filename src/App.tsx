@@ -19,7 +19,12 @@ import { OrderTracking } from './pages/OrderTracking';
 import { Policies } from './pages/Policies';
 import { type Product, initDB, syncFromFirebase } from './services/db';
 import { AdminLogin } from './pages/admin/AdminLogin';
+import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { AdminProducts } from './pages/admin/AdminProducts';
+import { AdminOrders } from './pages/admin/AdminOrders';
+import { AdminCustomers } from './pages/admin/AdminCustomers';
+import { AdminSettings } from './pages/admin/AdminSettings';
 import { MailSimulator } from './components/MailSimulator';
 import { Star, X, ShoppingCart } from 'lucide-react';
 
@@ -97,8 +102,15 @@ export const App: React.FC = () => {
             <Route path="/order-tracking" element={<OrderTracking />} />
             <Route path="/order-tracking/:id" element={<OrderTracking />} />
             <Route path="/policies" element={<Policies />} />
-            <Route path="/admin" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="products" element={<AdminProducts />} />
+              <Route path="orders" element={<AdminOrders />} />
+              <Route path="customers" element={<AdminCustomers />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
           </Routes>
         </main>
 
